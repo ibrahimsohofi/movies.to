@@ -1,0 +1,14 @@
+export default {
+  testEnvironment: 'node',
+  coveragePathIgnorePatterns: ['/node_modules/'],
+  testMatch: ['**/__tests__/**/*.js', '**/?(*.)+(spec|test).js'],
+  collectCoverageFrom: [
+    'src/**/*.js',
+    '!src/server.js',
+    '!src/config/setupDatabase.js',
+  ],
+  coverageDirectory: 'coverage',
+  verbose: true,
+  transform: {},
+  extensionsToTreatAsEsm: ['.js'],
+};
