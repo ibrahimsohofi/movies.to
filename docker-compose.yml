@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=${DB_NAME:-movies_to}
+      - MYSQL_USER=${DB_USER:-movies_user}
+      - MYSQL_PASSWORD=${DB_PASSWORD:-moviespassword}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - movies-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Frontend - React + Vite
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_TMDB_API_KEY=${VITE_TMDB_API_KEY}
+      - VITE_TMDB_BASE_URL=https://api.themoviedb.org/3
+      - VITE_TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p
+      - VITE_API_BASE_URL=http://backend:5000/api
+    depends_on:
+      - backend
+    networks:
+      - movies-network
+    restart: unless-stopped
+
+  # Backend - Node.js + Express
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-movies_user}
+      - DB_PASSWORD=${DB_PASSWORD:-moviespassword}
+      - DB_NAME=${DB_NAME:-movies_to}
+      - DB_CONNECTION_LIMIT=10
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRE=7d
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - MOVIE_SYNC_TTL_MINUTES=60
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM:-Movies.to <noreply@movies.to>}
+      - LOG_LEVEL=info
+      - TORRENT_PROVIDER=yts
+      - YTS_BASE_DOMAIN=yts.mx
+      - TORRENT_CACHE_TTL_MINUTES=5
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - movies-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx - Reverse Proxy (Optional for production)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - movies-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    driver: local
+
+networks:
+  movies-network:
+    driver: bridge
